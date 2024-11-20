@@ -14,6 +14,33 @@ DATA = 'https://github.com/umsi-amadaman/LEOcourseschedules/raw/main/LEOAug24Sch
 
 sched = pd.read_csv(DATA)
 
+monthlydata = 'https://raw.githubusercontent.com/umsi-amadaman/LEOcourseschedules/refs/heads/main/LEO_Oct24Monthly.csv'
+monthly = pd.read_csv(monthlydata)
+
+
+# Convert 'Class Instr ID' in sched to numeric, setting errors='coerce' to handle non-numeric values
+sched['Class Instr ID'] = pd.to_numeric(sched['Class Instr ID'], errors='coerce')
+monthly['UM ID'] = pd.to_numeric(monthly['UM ID'], errors='coerce')
+
+# Drop rows with NaN in 'Class Instr ID' or 'UM ID'
+sched = sched.dropna(subset=['Class Instr ID']).copy()
+monthly = monthly.dropna(subset=['UM ID']).copy()
+
+# Convert columns to float explicitly using .loc
+sched.loc[:, 'Class Instr ID'] = sched['Class Instr ID'].astype(float)
+monthly.loc[:, 'UM ID'] = monthly['UM ID'].astype(float)
+
+# Perform an inner join, matching 'Class Instr ID' from sched with 'UM ID' from monthly
+merged_df = sched.merge(
+    monthly[['UM ID', 'Job Title', 'Appointment Start Date', 'FTE', 'Department Name', 'Deduction']],
+    left_on='Class Instr ID',
+    right_on='UM ID',
+    how='inner'
+)
+
+# Drop the redundant 'UM ID' column from the result
+sched = merged_df.drop(columns=['Class Instr ID'])
+sched['UM ID'] = sched['UM ID'].apply(lambda x: f"{x:.0f}")
 
 
 def find_longest_match(string, key_list):
@@ -27,7 +54,8 @@ sched['CampusPrediction'] = ''
 
 # Iterate through unique Facility IDs
 for x in sched['Facility ID'].unique():
-    if isinstance(x, str):
+    # Check if x is a string AND not just whitespace
+    if isinstance(x, str) and x.strip():  # Added .strip() check here
         match = find_longest_match(x, new_Bldgs.keys())
         if match:
             # Remove the matched part from the original string
@@ -95,13 +123,18 @@ final_df = subject_filtered_df[subject_filtered_df['CampusPrediction'] == select
 # Sort the final_df by BldgPrediction
 final_df = final_df.sort_values(by='BldgPrediction')
 
-final_df = final_df.drop(columns=['Term', 'Term Descrshort', 'Class Nbr', 'Class Instr ID'])
+final_df = final_df.drop(columns=['Term', 'Term Descrshort', 'Class Nbr'])
 
 final_df = final_df[['Meeting Time Start', 'Meeting Time End','RoomPrediction', 'BldgPrediction', 'Crse Descr', 'Subject',
-       'Catalog Nbr', 'Class Section', 'Class Instr Name',
+       'Catalog Nbr', 'Class Section', 'Class Instr Name', 'UM ID', 'Job Title', 
+       'Appointment Start Date', 'FTE', 'Department Name', 'Deduction' ,
        'Class Mtg Nbr', 'Facility ID', 'Facility Descr',
        'Instruction Mode Descrshort', 'Meeting Start Dt', 'Meeting End Dt',
        'Mon', 'Tues', 'Wed', 'Thurs', 'Fri', 'Sat', 'Sun', 'CampusPrediction']]
+
+final_df['Meeting Time Start'] = pd.to_datetime(final_df['Meeting Time Start'], errors='coerce')
+
+final_df['Meeting Time End'] = pd.to_datetime(final_df['Meeting Time End'], errors='coerce')       
 
 # Display the final filtered DataFrame
 st.write(f"Showing schedule for {selected_subject} on {selected_campus} campus for {selected_day}:")
@@ -110,3 +143,6 @@ st.dataframe(final_df)
 # Optional: Display unique buildings for this selection
 unique_buildings = final_df['BldgPrediction'].unique()
 st.write(f"Buildings used: {', '.join(unique_buildings)}")
+
+#st.write("Columns right before display:", final_df.columns)
+#st.write("Sample of UM ID values:", final_df['UM ID'].head())
